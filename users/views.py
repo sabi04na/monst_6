@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.core.cache import cache
 
+
 from .models import CustomUser
 from .serializers import (
     AuthValidateSerializer,
