@@ -8,9 +8,9 @@ from rest_framework.authtoken.models import Token
 from rest_framework.generics import CreateAPIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomTokenObtainPairSerializer
+from django.core.cache import cache
 
-from .models import ConfirmationCode, CustomUser
+from .models import CustomUser
 from .serializers import (
     AuthValidateSerializer,
     ConfirmationSerializer,
@@ -53,16 +53,12 @@ class RegistrationAPIView(CreateAPIView):
         email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
 
-        # Use transaction to ensure data consistency
-        with transaction.atomic():
-            user = CustomUser.objects.create_user(
-                email=email, password=password, is_active=False
-            )
+        user = CustomUser.objects.create_user(
+            email=email, password=password, is_active=False
+        )
 
-            # Create a random 6-digit code
-            code = "".join(random.choices(string.digits, k=6))
-
-            confirmation_code = ConfirmationCode.objects.create(user=user, code=code)
+        code = "".join(random.choices(string.digits, k=6))
+        cache.set(f"confirmation_code_{user.id}", code, timeout=300)
 
         return Response(
             status=status.HTTP_201_CREATED,
@@ -78,21 +74,36 @@ class ConfirmUserAPIView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
 
         user_id = serializer.validated_data["user_id"]
+        code = serializer.validated_data["code"]
 
-        with transaction.atomic():
-            user = CustomUser.objects.get(id=user_id)
-            user.is_active = True
-            user.save()
 
-            token, _ = Token.objects.get_or_create(user=user)
+        from django.core.cache import cache
+        cached_code = cache.get(f"confirmation_code_{user_id}")
 
-            ConfirmationCode.objects.filter(user=user).delete()
+        if not cached_code:
+            return Response(
+                status=status.HTTP_400_BAD_REQUEST,
+                data={"error": "Код не найден или истёк срок действия."}
+            )
+
+        if cached_code != code:
+            return Response(
+                status=status.HTTP_400_BAD_REQUEST,
+                data={"error": "Неверный код подтверждения."}
+            )
+
+
+        user = CustomUser.objects.get(id=user_id)
+        user.is_active = True
+        user.save()
+
+
+        cache.delete(f"confirmation_code_{user_id}")
+
+        from rest_framework.authtoken.models import Token
+        token, _ = Token.objects.get_or_create(user=user)
 
         return Response(
             status=status.HTTP_200_OK,
-            data={"message": "User аккаунт успешно активирован", "key": token.key},
+            data={"message": "Аккаунт успешно активирован", "key": token.key},
         )
-
-
-class CustomTokenObtainPairView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer

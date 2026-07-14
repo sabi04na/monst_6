@@ -71,7 +71,7 @@ class ProductListCreateAPIView(ListCreateAPIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def post(self, request, *args, **kwargs):
-        # 1. Запрет для модераторов
+
         if request.user.is_authenticated and request.user.is_staff:
             return Response(
                 status=status.HTTP_403_FORBIDDEN,
