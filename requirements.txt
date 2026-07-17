@@ -14,4 +14,9 @@ sqlparse==0.5.3
 tzdata==2025.2
 uritemplate==4.1.1
 requests==2.31.0
-
+python-dotenv
+djangorestframework-simplejwt
+celery
+django-celery-beat
+redis
+django-redis
